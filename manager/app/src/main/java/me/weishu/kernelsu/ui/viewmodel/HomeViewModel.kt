@@ -46,11 +46,14 @@ class HomeViewModel(
 
     private fun buildState(): HomeUiState {
         val kernelVersion = getKernelVersion()
-        val isManager = Natives.isManager
-        val ksuVersion = if (isManager) Natives.version else null
+        // ShellKit: isManager 始终为 true，ksuVersion 改为 ShellKit 版本
+        val isManager = Natives.isManager // always true in ShellKit
+        val ksuVersion = if (isManager) Natives.version else null // ShellKit version code
         val kernelUAPIVersion = if (isManager) Natives.kernelUAPIVersion else null
         val managerUAPIVersion = Natives.managerUAPIVersion
-        val lkmMode = ksuVersion?.let { if (kernelVersion.isGKI()) Natives.isLkmMode else null }
+        // ShellKit 没有 LKM 概念
+        val lkmMode: Boolean? = null
+        // ShellKit: rootAvailable() 改为检查 daemon socket 连接
         val isRootAvailable = rootAvailable()
         val managerVersion = getManagerVersion(ksuApp)
 
@@ -58,12 +61,13 @@ class HomeViewModel(
             kernelVersion = kernelVersion,
             ksuVersion = ksuVersion,
             lkmMode = lkmMode,
-            isLkmBundled = lkmMode == true && Natives.isLkmBundled,
+            isLkmBundled = false,
             isManager = isManager,
             isManagerPrBuild = BuildConfig.IS_PR_BUILD,
             isKernelPrBuild = Natives.isPrBuild,
-            requiresNewKernel = isManager && Natives.managerUAPIVersion > Natives.kernelUAPIVersion,
-            requiresNewManager = isManager && Natives.managerUAPIVersion < Natives.kernelUAPIVersion,
+            // ShellKit 版本始终匹配，不需要更新
+            requiresNewKernel = false,
+            requiresNewManager = false,
             kernelUAPIVersion = kernelUAPIVersion,
             managerUAPIVersion = managerUAPIVersion,
             isRootAvailable = isRootAvailable,

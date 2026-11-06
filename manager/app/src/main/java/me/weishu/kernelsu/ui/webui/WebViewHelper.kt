@@ -83,7 +83,7 @@ internal suspend fun prepareWebView(
         }
 
         webUIState.moduleName = moduleInfo.name
-        webUIState.modDir = "/data/adb/modules/${moduleId}"
+        webUIState.modDir = "/data/local/tmp/shellkit/modules/${moduleId}"
 
         val shell = createRootShell(true)
         webUIState.rootShell = shell

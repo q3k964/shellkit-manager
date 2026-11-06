@@ -5,146 +5,126 @@ import androidx.annotation.Keep
 import androidx.compose.runtime.Immutable
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
-import me.weishu.kernelsu.Natives.Profile.RootProfileFlag
-import me.weishu.kernelsu.ui.util.rootAvailable
+import me.weishu.kernelsu.ui.util.ShellKitConnection
 
 /**
- * @author weishu
- * @date 2022/12/8.
+ * ShellKit Natives — KSU Manager fork stub 层。
+ *
+ * 原版通过 JNI 调用 kernel IOCTL（supercall）。
+ * ShellKit 没有 kernel 组件，所有 external 声明已替换为静态返回值。
+ *
+ * isFullFeatured() 改为检查 daemon socket 连接状态。
+ * Profile 数据类保留不变，UI 层依赖它。
  */
 object Natives {
-    // minimal supported kernel version
-    // 10915: allowlist breaking change, add app profile
-    // 10931: app profile struct add 'version' field
-    // 10946: add capabilities
-    // 10977: change groups_count and groups to avoid overflow write
-    // 11071: Fix the issue of failing to set a custom SELinux type.
-    // 12143: breaking: new supercall impl
-    // 32310: new get_allow_list ioctl
-    // 32336: new set_sepolicy ioctl
-    // 32377: add set_init_pgrp ioctl
-    // 32513: add uapi version
-    const val MINIMAL_SUPPORTED_KERNEL = 32513
+    // ShellKit 版本号（模拟 KSU version code，UI 显示用）
+    const val SHELLKIT_VERSION = 10000
+    const val SHELLKIT_VERSION_NAME = "ShellKit 1.0"
 
-    const val KERNEL_SU_DOMAIN = "u:r:ksu:s0"
+    const val MINIMAL_SUPPORTED_KERNEL = 0 // ShellKit 不需要 kernel 版本检查
+
+    const val KERNEL_SU_DOMAIN = "u:r:shell:s0"
 
     const val ROOT_UID = 0
     const val ROOT_GID = 0
 
-    init {
-        System.loadLibrary("kernelsu")
-    }
+    // --- 原 external 属性 → 静态值 ---
 
     val version: Int
-        external get
+        get() = SHELLKIT_VERSION
 
     val isSafeMode: Boolean
-        external get
+        get() = false
 
     val isLkmMode: Boolean
-        external get
+        get() = false
 
     val isLkmBundled: Boolean
-        external get
+        get() = false
 
     val isLateLoadMode: Boolean
-        external get
+        get() = false
 
+    /**
+     * ShellKit 始终作为 manager 运行。
+     */
     val isManager: Boolean
-        external get
+        get() = true
 
     val isPrBuild: Boolean
-        external get
+        get() = false
 
-    external fun uidShouldUmount(uid: Int): Boolean
+    // --- 原 external 函数 → stub ---
+
+    fun uidShouldUmount(uid: Int): Boolean = false
+
+    fun getAppProfile(key: String?, uid: Int): Profile {
+        // ShellKit 不支持 app profile，返回默认非 root profile
+        return Profile(key ?: "", uid, allowSu = false)
+    }
+
+    fun setAppProfile(profile: Profile?): Boolean {
+        // ShellKit 不支持 app profile 设置
+        return false
+    }
+
+    fun isSuEnabled(): Boolean = false
+
+    fun setSuEnabled(enabled: Boolean): Boolean = false
+
+    fun isKernelUmountEnabled(): Boolean = false
+
+    fun setKernelUmountEnabled(enabled: Boolean): Boolean = false
+
+    fun isSelinuxHideEnabled(): Boolean = false
+
+    fun setSelinuxHideEnabled(enabled: Boolean): Int = 0
+
+    fun getUserName(uid: Int): String? = null
+
+    fun getSuperuserCount(): Int = 0
+
+    // --- UAPI 版本（始终匹配，使 isFullFeatured 不被版本检查阻断）---
+
+    val kernelUAPIVersion: Int
+        get() = SHELLKIT_VERSION
+
+    val managerUAPIVersion: Int
+        get() = SHELLKIT_VERSION
 
     /**
-     * Get the profile of the given package.
-     * @param key usually the package name
-     * @return return null if failed.
+     * ShellKit 核心功能可用性 = daemon socket 已连接。
+     * 替代原版的 isManager && kernelUAPIVersion == managerUAPIVersion && rootAvailable()
+     *
+     * 注意：这里只检查当前连接状态，不主动发起连接（避免阻塞 UI 线程）。
+     * 连接由 ViewModel 在后台线程通过 rootAvailable() 发起。
      */
-    external fun getAppProfile(key: String?, uid: Int): Profile
-    external fun setAppProfile(profile: Profile?): Boolean
-
-    /**
-     * `su` compat mode can be disabled temporarily.
-     *  0: disabled
-     *  1: enabled
-     *  negative : error
-     */
-    external fun isSuEnabled(): Boolean
-    external fun setSuEnabled(enabled: Boolean): Boolean
-
-    /**
-     * Kernel module umount can be disabled temporarily.
-     *  0: disabled
-     *  1: enabled
-     *  negative : error
-     */
-    external fun isKernelUmountEnabled(): Boolean
-    external fun setKernelUmountEnabled(enabled: Boolean): Boolean
-
-    /**
-     * SELinux hide can be disabled temporarily.
-     *  0: disabled
-     *  1: enabled
-     *  negative : error
-     */
-    external fun isSelinuxHideEnabled(): Boolean
-    external fun setSelinuxHideEnabled(enabled: Boolean): Int
-
-    /**
-     * Get the user name for the uid.
-     */
-    external fun getUserName(uid: Int): String?
-
-    external fun getSuperuserCount(): Int
+    fun isFullFeatured(): Boolean {
+        return ShellKitConnection.isConnected()
+    }
 
     private const val NON_ROOT_DEFAULT_PROFILE_KEY = "$"
     private const val NOBODY_UID = 9999
 
     fun setDefaultUmountModules(umountModules: Boolean): Boolean {
-        Profile(
-            NON_ROOT_DEFAULT_PROFILE_KEY,
-            NOBODY_UID,
-            false,
-            umountModules = umountModules
-        ).let {
-            return setAppProfile(it)
-        }
+        // ShellKit 不支持 umount modules（无 root mount overlay）
+        return false
     }
 
     fun isDefaultUmountModules(): Boolean {
-        getAppProfile(NON_ROOT_DEFAULT_PROFILE_KEY, NOBODY_UID).let {
-            return it.umountModules
-        }
+        return false
     }
 
-    val kernelUAPIVersion: Int
-        external get
-
-    val managerUAPIVersion: Int
-        external get
-
-    fun isFullFeatured(): Boolean {
-        return isManager && kernelUAPIVersion == managerUAPIVersion && rootAvailable()
-    }
+    // --- Profile 数据类（UI 依赖，保持不变）---
 
     @Keep
     @Immutable
     @Parcelize
     @Serializable
     data class Profile(
-        // and there is a default profile for root and non-root
         val name: String,
-        // current uid for the package, this is convivent for kernel to check
-        // if the package name doesn't match uid, then it should be invalidated.
         val currentUid: Int = 0,
-
-        // if this is true, kernel will grant root permission to this package
         val allowSu: Boolean = false,
-
-        // these are used for root profile
         val rootUseDefault: Boolean = true,
         val rootTemplate: String? = null,
         val uid: Int = ROOT_UID,
@@ -153,11 +133,9 @@ object Natives {
         val capabilities: List<Int> = mutableListOf(),
         val context: String = KERNEL_SU_DOMAIN,
         val namespace: Int = Namespace.INHERITED.ordinal,
-
         val nonRootUseDefault: Boolean = true,
         val umountModules: Boolean = true,
-        var rules: String = "", // this field is save in ksud!!
-
+        var rules: String = "",
         val flags: Long = FLAG_KSU_NO_NEW_PRIVS,
     ) : Parcelable {
         @Keep
@@ -180,11 +158,11 @@ object Natives {
     const val FLAG_KSU_NO_NEW_PRIVS = 1L
 }
 
-fun List<RootProfileFlag>.toRawFlags(): Long =
+fun List<Natives.RootProfileFlag>.toRawFlags(): Long =
     fold(0L) { acc, flag -> acc.or(1L.shl(flag.ordinal)) }
 
-fun List<RootProfileFlag>.toOrdinalList(): List<Int> =
+fun List<Natives.RootProfileFlag>.toOrdinalList(): List<Int> =
     map { it.ordinal }
 
-fun Long.toRootProfileFlags(): List<RootProfileFlag> =
-    RootProfileFlag.entries.filter { 1L.shl(it.ordinal).and(this) != 0L }.toList()
+fun Long.toRootProfileFlags(): List<Natives.RootProfileFlag> =
+    Natives.RootProfileFlag.entries.filter { 1L.shl(it.ordinal).and(this) != 0L }.toList()

@@ -13,7 +13,7 @@ data class ScriptHostInfo(
  * single-quoted; only `$PATH` itself is left to the shell to expand.
  */
 object ScriptCommand {
-    const val BIN_DIR = "/data/adb/ksu/bin"
+    const val BIN_DIR = "/data/local/tmp/shellkit/bin"
     const val BUSYBOX = "$BIN_DIR/busybox"
     const val ENTRY = "action.sh"
 

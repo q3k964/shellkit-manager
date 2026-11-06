@@ -13,7 +13,6 @@ plugins {
 
 val androidCompileSdkVersion = rootProject.extra["androidCompileSdkVersion"] as Int
 val androidCompileSdkVersionMinor = rootProject.extra["androidCompileSdkVersionMinor"] as Int
-val androidCompileNdkVersion = rootProject.extra["androidCompileNdkVersion"] as String
 val androidBuildToolsVersion = rootProject.extra["androidBuildToolsVersion"] as String
 val androidMinSdkVersion = rootProject.extra["androidMinSdkVersion"] as Int
 val androidTargetSdkVersion = rootProject.extra["androidTargetSdkVersion"] as Int
@@ -53,50 +52,17 @@ protobuf {
     }
 }
 
-val baseCFlags = listOf(
-    "-Wall", "-Qunused-arguments", "-fvisibility=hidden", "-fvisibility-inlines-hidden",
-    "-fno-exceptions", "-fno-stack-protector", "-fomit-frame-pointer",
-    "-Wno-builtin-macro-redefined", "-Wno-unused-value", "-D__FILE__=__FILE_NAME__"
-)
-val baseCppFlags = baseCFlags + "-fno-rtti"
-
 android {
     namespace = "me.weishu.kernelsu"
 
     buildTypes {
         debug {
-            externalNativeBuild {
-                cmake {
-                    arguments += listOf("-DCMAKE_CXX_FLAGS_DEBUG=-Og", "-DCMAKE_C_FLAGS_DEBUG=-Og")
-                }
-            }
         }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
             vcsInfo.include = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
-            externalNativeBuild {
-                cmake {
-                    arguments += "-DDEBUG_SYMBOLS_PATH=${layout.buildDirectory.get().asFile.absolutePath}/symbols"
-                    arguments += "-DCMAKE_BUILD_TYPE=Release"
-
-                    val releaseFlags = listOf(
-                        "-flto", "-ffunction-sections", "-fdata-sections", "-Wl,--gc-sections",
-                        "-fno-unwind-tables", "-fno-asynchronous-unwind-tables", "-Wl,--exclude-libs,ALL"
-                    )
-                    val configFlags = listOf("-Oz", "-DNDEBUG").joinToString(" ")
-
-                    cppFlags += releaseFlags
-                    cFlags += releaseFlags
-
-                    arguments += listOf(
-                        "-DCMAKE_CXX_FLAGS_RELEASE=$configFlags",
-                        "-DCMAKE_C_FLAGS_RELEASE=$configFlags",
-                        "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,--gc-sections -Wl,--exclude-libs,ALL -Wl,--icf=all -s -Wl,--hash-style=sysv -Wl,-z,norelro"
-                    )
-                }
-            }
         }
     }
 
@@ -118,12 +84,6 @@ android {
         }
     }
 
-    externalNativeBuild {
-        cmake {
-            path = file("src/main/cpp/CMakeLists.txt")
-        }
-    }
-
     dependenciesInfo {
         includeInApk = false
         includeInBundle = false
@@ -139,7 +99,6 @@ android {
             }
     }
     buildToolsVersion = androidBuildToolsVersion
-    ndkVersion = androidCompileNdkVersion
 
     defaultConfig {
         minSdk = androidMinSdkVersion
@@ -150,18 +109,6 @@ android {
 
         buildConfigField("boolean", "IS_PR_BUILD", isPrBuild.toString())
         resValue("string", "app_name", managerName)
-
-        externalNativeBuild {
-            cmake {
-                arguments += "-DANDROID_STL=none"
-                cFlags += baseCFlags + "-std=c2x"
-                cppFlags += baseCppFlags + "-std=c++2b"
-            }
-        }
-
-        ndk {
-            abiFilters += listOf("arm64-v8a", "x86_64", "riscv64")
-        }
     }
 
     lint {

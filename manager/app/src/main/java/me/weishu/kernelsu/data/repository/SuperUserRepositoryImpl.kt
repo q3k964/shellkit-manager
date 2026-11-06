@@ -1,30 +1,24 @@
 package me.weishu.kernelsu.data.repository
 
-import android.content.ComponentName
-import android.content.Intent
-import android.content.ServiceConnection
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageInfo
-import android.os.Handler
-import android.os.IBinder
-import android.os.Looper
+import android.content.pm.PackageManager
 import android.os.SystemClock
-import android.util.Log
-import com.topjohnwu.superuser.Shell
-import com.topjohnwu.superuser.ipc.RootService
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
-import me.weishu.kernelsu.IKsuInterface
 import me.weishu.kernelsu.Natives
 import me.weishu.kernelsu.data.model.AppInfo
 import me.weishu.kernelsu.data.model.WEBVIEW_ZYGOTE_PROFILE_KEY
 import me.weishu.kernelsu.data.model.WEBVIEW_ZYGOTE_UID
 import me.weishu.kernelsu.ksuApp
-import me.weishu.kernelsu.ui.KsuService
-import me.weishu.kernelsu.ui.util.KsuCli
-import kotlin.coroutines.resume
 
+/**
+ * ShellKit fork: 原 SuperUserRepositoryImpl 通过 RootService (Binder root IPC)
+ * 获取跨用户安装包列表。ShellKit 无 root，改为直接使用 PackageManager
+ * 获取当前用户包列表。App profile 全部返回默认非 root 值。
+ *
+ * SuperUser 页面仍可显示应用列表，但所有 app 显示为「无 root 权限」
+ * — 这对 ShellKit 是正确行为（uid 2000 无法授予 root）。
+ */
 class SuperUserRepositoryImpl : SuperUserRepository {
 
     companion object {
@@ -33,86 +27,46 @@ class SuperUserRepositoryImpl : SuperUserRepository {
 
     override suspend fun getAppList(): Result<Pair<List<AppInfo>, List<Int>>> = withContext(Dispatchers.IO) {
         runCatching {
-            if (!KsuCli.SHELL.isRoot) {
-                return@withContext Result.failure(
-                    IllegalStateException("Root access is required")
+            val pm = ksuApp.packageManager
+            val start = SystemClock.elapsedRealtime()
+
+            // ShellKit: 直接使用 PackageManager 获取当前用户安装包
+            // 原 KSU 通过 RootService 跨用户获取，ShellKit 无 root 只能获取当前用户
+            val packages = pm.getInstalledPackages(0)
+
+            val newApps = packages.filter {
+                val ai = it.applicationInfo ?: return@filter false
+                ai.uid != WEBVIEW_ZYGOTE_UID &&
+                        (ai.flags and ApplicationInfo.FLAG_HAS_CODE) != 0
+            }.map {
+                val appInfo = it.applicationInfo!!
+                val profile = Natives.getAppProfile(it.packageName, appInfo.uid)
+                AppInfo(
+                    label = appInfo.loadLabel(pm).toString(),
+                    packageInfo = it,
+                    profile = profile,
                 )
+            }.toMutableList()
+
+            // WebView Zygote placeholder (保持与原版一致)
+            val systemInfo = ApplicationInfo(pm.getApplicationInfo("android", 0)).apply {
+                uid = WEBVIEW_ZYGOTE_UID
             }
-
-            val result = connectKsuService {
-                Log.w(TAG, "KsuService disconnected")
+            val placeholder = android.content.pm.PackageInfo().apply {
+                packageName = ""
+                applicationInfo = systemInfo
             }
+            newApps += AppInfo(
+                label = "WebView Zygote",
+                packageInfo = placeholder,
+                profile = Natives.getAppProfile(WEBVIEW_ZYGOTE_PROFILE_KEY, WEBVIEW_ZYGOTE_UID),
+                profileKey = WEBVIEW_ZYGOTE_PROFILE_KEY,
+                special = true,
+            )
 
-            var currentBinder = result.first
-            var currentConnection = result.second
-
-            try {
-                suspend fun reconnect(): IKsuInterface {
-                    withContext(Dispatchers.Main) {
-                        RootService.unbind(currentConnection)
-                    }
-                    val retry = connectKsuService { Log.w(TAG, "KsuService disconnected") }
-                    currentBinder = retry.first
-                    currentConnection = retry.second
-                    return IKsuInterface.Stub.asInterface(currentBinder)
-                }
-
-                val pm = ksuApp.packageManager
-                val start = SystemClock.elapsedRealtime()
-
-                var iface = IKsuInterface.Stub.asInterface(currentBinder)
-                val idsArray = try {
-                    iface.userIds
-                } catch (_: Exception) {
-                    iface = reconnect()
-                    iface.userIds
-                }
-
-                val slice = try {
-                    iface.getPackages(0)
-                } catch (_: Exception) {
-                    iface = reconnect()
-                    iface.getPackages(0)
-                }
-
-                val packages = slice.list
-                val newApps = packages.filter {
-                    val ai = it.applicationInfo ?: return@filter false
-                    ai.uid != WEBVIEW_ZYGOTE_UID &&
-                            (ai.flags and ApplicationInfo.FLAG_HAS_CODE) != 0
-                }.map {
-                    val appInfo = it.applicationInfo!!
-                    val profile = Natives.getAppProfile(it.packageName, appInfo.uid)
-                    AppInfo(
-                        label = appInfo.loadLabel(pm).toString(),
-                        packageInfo = it,
-                        profile = profile,
-                    )
-                }.toMutableList()
-
-                // WebView Zygote is a single system UID, not a per-user package. Reuse the system icon.
-                val systemInfo = ApplicationInfo(pm.getApplicationInfo("android", 0)).apply {
-                    uid = WEBVIEW_ZYGOTE_UID
-                }
-                val placeholder = PackageInfo().apply {
-                    packageName = ""
-                    applicationInfo = systemInfo
-                }
-                newApps += AppInfo(
-                    label = "WebView Zygote",
-                    packageInfo = placeholder,
-                    profile = Natives.getAppProfile(WEBVIEW_ZYGOTE_PROFILE_KEY, WEBVIEW_ZYGOTE_UID),
-                    profileKey = WEBVIEW_ZYGOTE_PROFILE_KEY,
-                    special = true,
-                )
-
-                Log.i(TAG, "load cost: ${SystemClock.elapsedRealtime() - start}")
-                Pair(newApps, idsArray.toList())
-            } finally {
-                withContext(Dispatchers.Main) {
-                    RootService.unbind(currentConnection)
-                }
-            }
+            android.util.Log.i(TAG, "load cost: ${SystemClock.elapsedRealtime() - start}")
+            // ShellKit: 只返回当前用户 (user 0)
+            Pair(newApps, listOf(0))
         }
     }
 
@@ -124,44 +78,6 @@ class SuperUserRepositoryImpl : SuperUserRepository {
                 val profile = Natives.getAppProfile(it.profileKey, it.uid)
                 it.copy(profile = profile)
             }
-        }
-    }
-
-    private suspend inline fun connectKsuService(
-        crossinline onDisconnect: () -> Unit = {}
-    ): Pair<IBinder, ServiceConnection> = withContext(Dispatchers.Main) {
-        suspendCancellableCoroutine { cont ->
-            val connection = object : ServiceConnection {
-                override fun onServiceDisconnected(name: ComponentName?) {
-                    onDisconnect()
-                }
-
-                override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
-                    if (cont.isActive) {
-                        cont.resume(binder as IBinder to this)
-                    }
-                }
-            }
-
-            cont.invokeOnCancellation {
-                if (Looper.myLooper() == Looper.getMainLooper()) {
-                    RootService.unbind(connection)
-                } else {
-                    Handler(Looper.getMainLooper()).post {
-                        RootService.unbind(connection)
-                    }
-                }
-            }
-
-            val intent = Intent(ksuApp, KsuService::class.java)
-
-            val task = RootService.bindOrTask(
-                intent,
-                Shell.EXECUTOR,
-                connection,
-            )
-            val shell = KsuCli.SHELL
-            task?.let { shell.execTask(it) }
         }
     }
 }
