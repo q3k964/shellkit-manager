@@ -39,7 +39,7 @@ import me.weishu.kernelsu.ui.util.getDefaultPartition
 import me.weishu.kernelsu.ui.util.getSlotSuffix
 import me.weishu.kernelsu.ui.util.isAbDevice
 import me.weishu.kernelsu.ui.util.probeRemoteBootPartitions
-import me.weishu.kernelsu.ui.util.rootAvailable
+import me.weishu.kernelsu.ui.util.shellKitAvailable
 import top.yukonga.miuix.kmp.basic.SnackbarHostState as MiuixSnackbarHostState
 
 @Composable
@@ -70,7 +70,7 @@ fun InstallScreen() {
     val currentKmi by produceState(initialValue = "") { value = getCurrentKmi() }
     val partitions by produceState(initialValue = emptyList()) { value = getAvailablePartitions() }
     val defaultPartition by produceState(initialValue = "") { value = getDefaultPartition() }
-    val rootAvailable by produceState(initialValue = false) { value = rootAvailable() }
+    val rootAvailable by produceState(initialValue = false) { value = shellKitAvailable() }
     val isAbDevice by produceState(initialValue = false) { value = isAbDevice() }
     val isGkiDevice by produceState(initialValue = false) { value = getKernelVersion().isGKI() }
 

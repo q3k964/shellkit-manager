@@ -139,7 +139,7 @@ private fun flashWithIO(
         onStderr("daemon not connected")
     }
     // 构造一个 Shell.Result 兼容对象（libsu 6.0 没有 SUCCESS 常量）
-    return Shell.newJob().add("true").to(ArrayList()).exec()
+    return KsuCli.SHELL.newJob().add("true").to(ArrayList()).exec()
 }
 
 fun flashModule(

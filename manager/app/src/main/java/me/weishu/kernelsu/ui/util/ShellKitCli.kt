@@ -128,8 +128,3 @@ object ShellKitConnection {
 fun shellKitAvailable(): Boolean {
     return ShellKitConnection.isConnected() || ShellKitConnection.connect()
 }
-
-/**
- * 兼容旧代码：rootAvailable 改为检查 daemon。
- */
-fun rootAvailable(): Boolean = shellKitAvailable()
