@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.parcelize.Parcelize
 import me.weishu.kernelsu.BuildConfig
+import me.weishu.kernelsu.core.tasks.ProbeResult
 import me.weishu.kernelsu.ksuApp
 import org.json.JSONArray
 import java.io.File
@@ -137,8 +138,8 @@ private fun flashWithIO(
     } else {
         onStderr("daemon not connected")
     }
-    // 构造一个 Shell.Result 兼容对象
-    return Shell.Result.SUCCESS
+    // 构造一个 Shell.Result 兼容对象（libsu 6.0 没有 SUCCESS 常量）
+    return Shell.newJob().add("true").to(ArrayList()).exec()
 }
 
 fun flashModule(
@@ -359,6 +360,7 @@ fun restartApp(packageName: String, userId: Int? = null) {
 
 // ===================== Probe（不支持）=====================
 
-suspend fun probeRemoteBootPartitions(url: String): Nothing {
-    throw UnsupportedOperationException("ShellKit does not support boot probing")
+suspend fun probeRemoteBootPartitions(url: String): ProbeResult {
+    // ShellKit 不支持 boot probing — 返回空结果
+    return ProbeResult(emptyList(), null)
 }

@@ -6,6 +6,7 @@ import androidx.compose.runtime.Immutable
 import kotlinx.parcelize.Parcelize
 import kotlinx.serialization.Serializable
 import me.weishu.kernelsu.ui.util.ShellKitConnection
+import me.weishu.kernelsu.Natives.Profile.RootProfileFlag
 
 /**
  * ShellKit Natives — KSU Manager fork stub 层。
@@ -158,11 +159,11 @@ object Natives {
     const val FLAG_KSU_NO_NEW_PRIVS = 1L
 }
 
-fun List<Natives.RootProfileFlag>.toRawFlags(): Long =
+fun List<RootProfileFlag>.toRawFlags(): Long =
     fold(0L) { acc, flag -> acc.or(1L.shl(flag.ordinal)) }
 
-fun List<Natives.RootProfileFlag>.toOrdinalList(): List<Int> =
+fun List<RootProfileFlag>.toOrdinalList(): List<Int> =
     map { it.ordinal }
 
-fun Long.toRootProfileFlags(): List<Natives.RootProfileFlag> =
-    Natives.RootProfileFlag.entries.filter { 1L.shl(it.ordinal).and(this) != 0L }.toList()
+fun Long.toRootProfileFlags(): List<RootProfileFlag> =
+    RootProfileFlag.entries.filter { 1L.shl(it.ordinal).and(this) != 0L }.toList()
